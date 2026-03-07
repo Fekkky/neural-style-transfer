@@ -21,17 +21,7 @@
 内容约束：生成图在深层特征上与内容图相似
 风格约束：生成图在多层 Gram 矩阵上与风格图相似
 
-损失函数
-总损失：
-Ltotal=α⋅Lcontent+β⋅Lstyle+γ⋅LtvL_{total} = \alpha \cdot L_{content} + \beta \cdot L_{style} + \gamma \cdot L_{tv}Ltotal​=α⋅Lcontent​+β⋅Lstyle​+γ⋅Ltv​
-内容损失： 比较生成图与内容图在 conv4_2 层的特征图差异
-Lcontent=12∑i,j(Fijl−Pijl)2L_{content} = \frac{1}{2}\sum_{i,j}(F_{ij}^l - P_{ij}^l)^2Lcontent​=21​i,j∑​(Fijl​−Pijl​)2
-风格损失： 比较生成图与风格图在五层（relu1_1 至 relu5_1）的 Gram 矩阵差异
-Lstyle=∑lwl⋅El,El=1ClMl∑i,j(Gijl−Aijl)2L_{style} = \sum_l w_l \cdot E_l, \quad E_l = \frac{1}{C_l M_l}\sum_{i,j}(G_{ij}^l - A_{ij}^l)^2Lstyle​=l∑​wl​⋅El​,El​=Cl​Ml​1​i,j∑​(Gijl​−Aijl​)2
-Gram 矩阵： 捕捉特征图各通道之间的相关性，丢弃空间位置信息，保留纹理统计特征
-Gijl=∑kFikl⋅FjklG_{ij}^l = \sum_k F_{ik}^l \cdot F_{jk}^lGijl​=k∑​Fikl​⋅Fjkl​
-TV 损失（Total Variation Loss）： 约束相邻像素差异，使生成图更平滑
-Ltv=∑∣水平差异∣+∑∣垂直差异∣L_{tv} = \sum|\text{水平差异}| + \sum|\text{垂直差异}|Ltv​=∑∣水平差异∣+∑∣垂直差异∣
+
 优化过程
 与普通神经网络训练不同，本方法固定 VGG-19 权重，优化生成图的像素值本身：
 内容图 → VGG-19 → conv4_2特征图（固定）
