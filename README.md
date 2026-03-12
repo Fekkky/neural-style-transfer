@@ -1,108 +1,162 @@
-基于神经风格迁移的图像艺术化处理系统
-基于 Gatys et al. 2015 论文《A Neural Algorithm of Artistic Style》的 PyTorch 实现，通过优化生成图像的像素值，使其同时保留内容图的语义结构和风格图的纹理特征。
+# 神经风格迁移
 
-效果展示
-生成效果案例1
-![alt text](image-1.png)
-![alt text](image-3.png)
-![alt text](image-2.png)
-生成效果案例2
-![alt text](image-5.png)
-![alt text](image-6.png)
-![alt text](image-4.png)
-生成效果案例3
-![alt text](image-7.png)
-![alt text](image-8.png)
-![alt text](image-9.png)
-算法原理
-核心思想
-本项目使用预训练的 VGG-19 作为特征提取器，通过梯度下降优化生成图像的像素值，使其同时满足两个约束：
-
-内容约束：生成图在深层特征上与内容图相似
-风格约束：生成图在多层 Gram 矩阵上与风格图相似
+基于 PyTorch 实现的三种神经风格迁移方法：**Gatys 优化方法**、**AdaIN 实时任意风格迁移**，以及本项目的核心改进——**引入跳跃连接的 AdaIN**，从根本上解决了棋盘格伪影问题。
 
 
-优化过程
-与普通神经网络训练不同，本方法固定 VGG-19 权重，优化生成图的像素值本身：
-内容图 → VGG-19 → conv4_2特征图（固定）
-风格图 → VGG-19 → 五层Gram矩阵（固定）
-生成图（初始=内容图副本）
-    ↓ 每轮迭代
-    ├─ 提取特征 → 计算三个损失
-    ├─ 反向传播 → 对像素求梯度
-    └─ L-BFGS  → 更新像素值
 
-项目结构
-Artistic Style Transfer/
-├── config.py                # 超参数配置
-├── run.py                   # 主程序入口
-├── requirements.txt         # 依赖库
-├── models/
-│   ├── __init__.py
-│   └── vgg_extractor.py     # VGG-19特征提取器
-├── losses/
-│   ├── __init__.py
-│   ├── content_loss.py      # 内容损失
-│   ├── style_loss.py        # 风格损失（含Gram矩阵）
-│   └── tv_loss.py           # 总变差损失
-├── utils/
-│   ├── __init__.py
-│   └── image_utils.py       # 图片读取、归一化、保存
-└── data/
-    ├── content/             # 内容图片
-    ├── style/               # 风格图片
-    └── output/              # 生成结果（按内容图分目录）
+---
 
-环境安装
-1. 创建虚拟环境
-bashconda create -n style_transfer python=3.10
-conda activate style_transfer
-2. 安装 PyTorch（CUDA 11.8）
-bashpip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+## 效果展示
 
-其他 CUDA 版本请前往 pytorch.org 获取对应安装命令
+| 内容图 | 风格图 | 输出结果（AdaIN + 跳跃连接）|
+|--------|--------|--------------------------|
+| content2.jpg | 星夜 | *(在此插入效果图)* |
+| mountain.jpg | 吻 | *(在此插入效果图)* |
 
-3. 安装其余依赖
-bashpip install -r requirements.txt
-4. 验证安装
-pythonimport torch
-print(torch.cuda.is_available())    # True
-print(torch.cuda.get_device_name(0))
+---
 
-使用方法
-1. 准备图片
-将内容图放入 data/content/，风格图放入 data/style/，支持 .jpg、.png 等常见格式。
-2. 修改配置
-编辑 config.py：
-pythoncontent_img = "data/content/你的内容图.jpg"
-style_img   = "data/style/你的风格图.jpg"
-3. 运行
-bashconda activate style_transfer
-python run.py
-生成结果自动保存到 data/output/内容图名称/风格图名称.png。
+## 方法介绍
 
-参数说明
-参数默认值说明image_size400图片缩放尺寸，越大效果越好但越慢num_steps1000优化迭代次数，L-BFGS 下 1000 步通常足够optimizerlbfgs优化器，推荐 lbfgs，也支持 adamcontent_weight1e5内容损失权重 αstyle_weight3e4风格损失权重 βtv_weight1e0TV 损失权重 γ，控制平滑程度lr1.0学习率（仅 Adam 有效）
-调参建议
-风格太弱，内容太明显  →  降低 content_weight 或提高 style_weight
-风格太强，内容模糊    →  提高 content_weight 或降低 style_weight
-生成图噪点多          →  提高 tv_weight
-生成图过于平滑        →  降低 tv_weight
+### 1. Gatys 优化方法
+Gatys 等人（2015）提出的原始神经风格迁移方法。通过 L-BFGS 对合成图像进行迭代优化，最小化内容损失与基于 Gram Matrix 的风格损失的加权组合。
 
-实验观察
-风格图与内容图语义相关性的影响
-实验发现，当内容图与风格图语义相似时（如同为花卉题材），风格迁移效果显著优于语义差异较大的组合。
-原因分析： Gram 矩阵只捕捉特征的共现关系，不保留空间位置信息。当内容图与风格图语义相近时，VGG 提取的特征在空间分布上接近，内容损失与风格损失的优化方向基本一致，迁移效果自然。反之，两个损失优化方向冲突，生成图出现杂乱现象。
-各超参数对结果的影响
-变量观察结果content_weight ↑内容结构更清晰，风格减弱style_weight ↑风格纹理更明显，内容趋于模糊tv_weight ↑图像更平滑，噪点减少num_steps ↑损失持续下降，细节更精细
+- 生成质量最高
+- 每张图约 3 分钟（300 次迭代，RTX 3060）
+- 每次只能迁移一种风格
 
-参考文献
-Gatys, L. A., Ecker, A. S., & Bethge, M. (2015).
-A Neural Algorithm of Artistic Style.
-arXiv:1508.06576
+### 2. AdaIN 实时任意风格迁移
+Huang & Belongie（2017）提出的前馈网络方法。将内容特征的逐通道均值和方差对齐至风格特征的统计量，AdaIN 层本身无任何可训练参数。
 
-开发环境
+- 单张 256×256 图像推理约 20ms
+- 无需重新训练即可支持任意风格
+- 使用 MS-COCO train2017 + 23 张艺术风格图训练
 
-Python 3.10
-PyTorch 2.1.1 + CUDA 11.8
-NVIDIA GeForce RTX 3060 Laptop GPU
+### 3. AdaIN + 跳跃连接（本项目改进）
+原始 AdaIN 解码器需将 16×16 的特征图上采样 16 倍，在高频纹理风格（如星夜、吻）上会产生明显的**棋盘格伪影**。改进型解码器将编码器浅层特征直接注入解码器的对应分辨率层，从根本上弥补大倍率上采样导致的空间细节损失。
+
+```
+编码器：relu1_1 (H×W,   64ch)  ──────────────────────────→ concat
+        relu2_1 (H/2,  128ch)  ──────────────→ concat
+        relu3_1 (H/4,  256ch)  ──────→ concat
+        relu4_1 (H/8,  512ch)  → AdaIN → ↑2× → Fusion3 → ↑2× → Fusion2 → ↑2× → Fusion1 → ↑2× → RGB
+```
+
+其他改进：
+- `ReflectionPad2d` 替代零填充 → 彻底消除边缘色彩扩散伪影
+- 全变分损失（TV Loss，λ=1e-4）→ 生成图像更平滑
+- 训练时从 23 张风格图中随机采样 → 提升模型泛化能力
+
+---
+
+## 项目结构
+
+```
+neural-style-transfer/
+├── Gatys/
+│   └── gatys.py                   # 优化方法实现
+│
+└── AdaIN_style_transfer/
+    ├── config.py                  # 超参数集中配置
+    ├── train.py                   # 训练脚本
+    ├── run.py                     # 单张图像推理
+    ├── batch_run.py               # 批量推理
+    ├── models/
+    │   ├── encoder.py             # VGG-19 截至 relu4_1（权重固定）
+    │   ├── decoder.py             # 带跳跃连接的解码器
+    │   └── adain.py               # AdaIN 层（无可训练参数）
+    ├── losses/
+    │   └── loss.py                # 内容损失 + 风格损失 + TV 损失
+    └── utils/
+        └── image_utils.py
+```
+
+---
+
+## 快速开始
+
+### 环境配置
+
+```bash
+conda create -n nst python=3.10
+conda activate nst
+pip install torch==2.1.1+cu118 torchvision==0.16.1+cu118 --index-url https://download.pytorch.org/whl/cu118
+pip install pillow tqdm
+```
+
+### Gatys 方法（无需训练）
+
+```bash
+cd Gatys
+python gatys.py \
+  --content ../data/content/content2.jpg \
+  --style   ../data/style/theStarNight.jpg \
+  --output  output.jpg \
+  --iters   300
+```
+
+### AdaIN 推理（使用预训练权重）
+
+```bash
+cd AdaIN_style_transfer
+python run.py \
+  --content ../data/content/content2.jpg \
+  --style   ../data/style/theStarNight.jpg \
+  --output  ../data/output/AdaIN/result.jpg
+```
+
+### AdaIN 从头训练
+
+1. 下载 [MS-COCO train2017](https://cocodataset.org/#download)，放至 `data/content/Adain_content/train2017/`
+2. 将风格图放至 `data/style/`
+3. 执行训练：
+
+```bash
+cd AdaIN_style_transfer
+python train.py
+```
+
+`config.py` 中的主要参数说明：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `image_size` | 256 | 训练分辨率 |
+| `batch_size` | 8 | 针对 6GB 显存调整 |
+| `num_epochs` | 2 | train2017 约 29,500 步/epoch |
+| `style_weight` | 10.0 | 风格损失权重（内容权重为 1.0）|
+| `tv_weight` | 1e-4 | 全变分正则化强度 |
+
+---
+
+## 关键设计决策
+
+**为什么需要跳跃连接？**
+AdaIN 在 `relu4_1`（分辨率 16×16）处完成风格变换，解码器需将其上采样 16 倍还原至原始分辨率。在此过程中大量空间细节丢失，在高频纹理风格图上产生周期性棋盘格伪影。跳跃连接将编码器浅层特征直接传入解码器对应层，从根本上解决了这一问题。
+
+**为什么使用反射填充？**
+零填充在图像边缘引入人工边界，卷积响应在边缘产生系统性偏差，导致色彩向外扩散。反射填充以边缘像素为轴进行镜像延伸，保持特征连续性，彻底消除边缘伪影。
+
+**为什么不预计算风格特征？**
+23 张风格图在 `relu4_1` 产生的特征约 37MB，加上训练中间张量，6GB 显存很快耗尽（OOM）。最终方案是将风格图以 CPU 张量形式存储，每步随机取一张搬至 GPU，用完即释放。
+
+
+---
+
+## 实验环境
+
+| 组件 | 版本 |
+|------|------|
+| GPU | NVIDIA RTX 3060 Laptop（6GB）|
+| CUDA | 11.8 |
+| Python | 3.10 |
+| PyTorch | 2.1.1+cu118 |
+
+---
+
+## 参考文献
+
+- Gatys et al. — [A Neural Algorithm of Artistic Style](https://arxiv.org/abs/1508.06576)（2015）
+- Johnson et al. — [Perceptual Losses for Real-Time Style Transfer](https://arxiv.org/abs/1603.08155)（2016）
+- Huang & Belongie — [Arbitrary Style Transfer in Real-time with AdaIN](https://arxiv.org/abs/1703.06868)（2017）
+- Odena et al. — [Deconvolution and Checkerboard Artifacts](https://distill.pub/2016/deconv-checkerboard/)（2016）
+
+---
